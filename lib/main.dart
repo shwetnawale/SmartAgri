@@ -542,49 +542,71 @@ class _LoginPageState extends State<LoginPage> {
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Expanded(
-                                    child: Text(
-                                      user['name']!,
-                                      style: const TextStyle(fontWeight: FontWeight.bold),
-                                      overflow: TextOverflow.ellipsis,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(user['name']!, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                        Text(user['phone']!, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                                      ],
                                     ),
                                   ),
-                                  const Icon(Icons.arrow_forward_ios, size: 16),
+                                  const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.green),
                                 ],
                               ),
                             ),
                           )),
-                      const Divider(height: 30),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => LoginPage(authMode: AuthMode.signup, selectedRole: widget.selectedRole),
-                            ),
-                          );
-                        },
-                        child: const Text('Need account? Sign Up', style: TextStyle(color: Colors.green)),
-                      ),
                     ] else ...[
                       TextField(
                         controller: _nameController,
-                        decoration: const InputDecoration(labelText: 'Full Name'),
+                        decoration: InputDecoration(
+                          labelText: 'Full Name',
+                          prefixIcon: const Icon(Icons.person),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                        ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 15),
                       TextField(
                         controller: _phoneController,
                         keyboardType: TextInputType.phone,
-                        maxLength: 10,
-                        decoration: const InputDecoration(labelText: 'Phone Number (10 digits)'),
+                        decoration: InputDecoration(
+                          labelText: 'Phone Number (10 digits)',
+                          prefixIcon: const Icon(Icons.phone),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                        ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 20),
                       ElevatedButton(
                         onPressed: _createAccountForSelectedRole,
-                        style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2E7D32),
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 55),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        ),
                         child: const Text('Create Account'),
                       ),
                     ],
+                    const SizedBox(height: 15),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Go Back', style: TextStyle(color: Colors.green)),
+                    ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: TextField(
+                  onChanged: (val) {
+                    BackendConfig.activeBaseUrl.value = BackendConfig._normalize(val);
+                  },
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Change Server IP (Optional)',
+                    labelStyle: TextStyle(color: Colors.white70),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white70)),
+                  ),
                 ),
               ),
             ],
@@ -595,48 +617,9 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
-double _vehicleMultiplier(String vehicle) {
-  const Map<String, double> multipliers = {
-    'mini': 1.0,
-    'pickup': 1.2,
-    'medium': 1.5,
-    'large': 2.0,
-    'refrigerated': 2.4,
-  };
-  return multipliers[vehicle] ?? 1.0;
-}
-
-String _routeKey(String from, String to) => '${from.trim().toLowerCase()}->${to.trim().toLowerCase()}';
-
-double _estimateDistanceKm(String from, String to) {
-  const Map<String, double> routeKm = {
-    'nashik->pune': 210,
-    'nashik->mumbai': 170,
-    'pune->mumbai': 150,
-    'pune->nagpur': 720,
-    'nashik->nagpur': 680,
-    'kolhapur->pune': 235,
-    'satara->pune': 115,
-    'ahmednagar->pune': 125,
-  };
-
-  final String forward = _routeKey(from, to);
-  final String reverse = _routeKey(to, from);
-  return routeKm[forward] ?? routeKm[reverse] ?? 0;
-}
-
-double _calculateTripPrice({
-  required double distanceKm,
-  required double weightKg,
-  required String vehicle,
-}) {
-  final double transport = distanceKm * 12 * _vehicleMultiplier(vehicle);
-  final double handling = weightKg * 0.4;
-  return transport + handling;
-}
-
 class FarmerDashboard extends StatefulWidget {
   final String userName;
+
   const FarmerDashboard({super.key, required this.userName});
 
   @override
@@ -644,37 +627,37 @@ class FarmerDashboard extends StatefulWidget {
 }
 
 class _FarmerDashboardState extends State<FarmerDashboard> {
-  StreamSubscription<Map<String, dynamic>>? _wsSubscription;
-  final TextEditingController _itemController = TextEditingController();
+  final TextEditingController _itemController = TextEditingController(text: 'Tomato');
   final TextEditingController _fromController = TextEditingController(text: 'Nashik');
-  final TextEditingController _toController = TextEditingController(text: 'Pune');
-  final TextEditingController _weightController = TextEditingController();
-  final TextEditingController _distanceController = TextEditingController(text: '180');
+  final TextEditingController _toController = TextEditingController(text: 'Mumbai');
+  final TextEditingController _weightController = TextEditingController(text: '100');
+  final TextEditingController _distanceController = TextEditingController(text: '160');
   final TextEditingController _notesController = TextEditingController();
 
   String _vehicle = 'mini';
   bool _shareTruck = true;
+  double _price = 0;
+  bool _loading = false;
+  StreamSubscription<Map<String, dynamic>>? _wsSubscription;
 
+  List<Map<String, dynamic>> _myRequestHistory = [];
+  List<Map<String, dynamic>> _decisions = [];
   List<Map<String, dynamic>> _demands = [];
   List<Map<String, dynamic>> _spaces = [];
-  List<Map<String, dynamic>> _decisions = [];
-  List<Map<String, dynamic>> _retailerDemandResponses = [];
-  List<Map<String, dynamic>> _counterResponses = [];
   List<Map<String, dynamic>> _allocations = [];
-  List<Map<String, dynamic>> _myRequestHistory = [];
-  bool _loading = false;
+  List<Map<String, dynamic>> _farmerDemandDecisions = [];
 
   @override
   void initState() {
     super.initState();
+    _recalculateDistance();
     RealtimeService.instance.ensureConnected();
     _wsSubscription = RealtimeService.instance.events.listen((_) {
       if (mounted) {
-        _refreshFeed();
+        _refreshData();
       }
     });
-    _recalculateDistance();
-    _refreshFeed();
+    _refreshData();
   }
 
   @override
@@ -689,184 +672,117 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
     super.dispose();
   }
 
-  double get _weight => double.tryParse(_weightController.text.trim()) ?? 0;
-  double get _distance => double.tryParse(_distanceController.text.trim()) ?? 0;
-  double get _price => _calculateTripPrice(distanceKm: _distance, weightKg: _weight, vehicle: _vehicle);
-
   void _recalculateDistance() {
-    final double km = _estimateDistanceKm(_fromController.text, _toController.text);
-    _distanceController.text = km > 0 ? km.toStringAsFixed(0) : '';
-  }
-
-  Future<void> _refreshFeed() async {
-    setState(() => _loading = true);
-    final List<Map<String, dynamic>> events = await ApiService.fetchEvents();
-    if (!mounted) {
-      return;
-    }
-
+    final double dist = double.tryParse(_distanceController.text) ?? 0;
+    final double weight = double.tryParse(_weightController.text) ?? 0;
+    double rate = 2.0;
+    if (_vehicle == 'refrigerated') rate = 5.0;
+    if (_vehicle == 'large') rate = 4.0;
     setState(() {
-      _demands = events.where((e) => (e['type'] ?? '') == 'retailer_demand').toList();
-      _spaces = events.where((e) => (e['type'] ?? '') == 'truck_space').toList();
-      _retailerDemandResponses = events
-          .where((e) => (e['type'] ?? '') == 'retailer_demand_decision')
-          .where((e) => ((e['payload'] as Map<String, dynamic>? ?? {})['farmerName'] ?? '') == widget.userName)
-          .toList();
-      _decisions = events
-          .where((e) => (e['type'] ?? '') == 'transporter_decision')
-          .where((e) => ((e['payload'] as Map<String, dynamic>? ?? {})['farmerName'] ?? '') == widget.userName)
-          .toList();
-      _counterResponses = events
-          .where((e) => (e['type'] ?? '') == 'farmer_counter_decision')
-          .where((e) => ((e['payload'] as Map<String, dynamic>? ?? {})['farmerName'] ?? '') == widget.userName)
-          .toList();
-      _allocations = events
-          .where((e) => (e['type'] ?? '') == 'truck_allocation')
-          .where((e) => ((e['payload'] as Map<String, dynamic>? ?? {})['farmerName'] ?? '') == widget.userName)
-          .toList();
-      _myRequestHistory = events
-          .where((e) {
-            final String type = (e['type'] ?? '').toString();
-            final bool isMyEvent = (e['userName'] ?? '').toString() == widget.userName;
-            return isMyEvent && (type == 'transport_request' || type == 'join_truck_request');
-          })
-          .toList()
-        ..sort((a, b) {
-          final DateTime ad = DateTime.tryParse((a['createdAt'] ?? '').toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
-          final DateTime bd = DateTime.tryParse((b['createdAt'] ?? '').toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
-          return bd.compareTo(ad);
-        });
-      _loading = false;
+      _price = dist * weight * rate / 100;
+      if (_price < 500) _price = 500;
     });
   }
+
+  Future<void> _refreshData() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    try {
+      final List<Map<String, dynamic>> requests = await ApiService.fetchEvents(type: 'transport_request');
+      final List<Map<String, dynamic>> joins = await ApiService.fetchEvents(type: 'join_truck_request');
+      final List<Map<String, dynamic>> decisions = await ApiService.fetchEvents(type: 'transporter_decision');
+      final List<Map<String, dynamic>> demands = await ApiService.fetchEvents(type: 'retailer_demand');
+      final List<Map<String, dynamic>> spaces = await ApiService.fetchEvents(type: 'truck_space');
+      final List<Map<String, dynamic>> allocations = await ApiService.fetchEvents(type: 'truck_allocation');
+      final List<Map<String, dynamic>> fdd = await ApiService.fetchEvents(type: 'retailer_demand_decision');
+
+      if (mounted) {
+        setState(() {
+          _myRequestHistory = requests.where((e) => e['userName'] == widget.userName).toList();
+          _myRequestHistory.addAll(joins.where((e) => e['userName'] == widget.userName));
+          _myRequestHistory.sort((a, b) => (b['timestamp'] ?? '').compareTo(a['timestamp'] ?? ''));
+
+          _decisions = decisions;
+          _demands = demands;
+          _spaces = spaces;
+          _allocations = allocations;
+          _farmerDemandDecisions = fdd.where((e) => e['userName'] == widget.userName).toList();
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _routeKey(String f, String t) => '${f.toLowerCase().trim()}_${t.toLowerCase().trim()}';
 
   Future<void> _submitTransportRequest() async {
     final String item = _itemController.text.trim();
     final String from = _fromController.text.trim();
     final String to = _toController.text.trim();
-    final String notes = _notesController.text.trim();
+    final double weight = double.tryParse(_weightController.text.trim()) ?? 0;
 
-    if (item.isEmpty || from.isEmpty || to.isEmpty || _weight <= 0 || _distance <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Fill item, locations, distance, and weight.')),
-      );
+    if (item.isEmpty || from.isEmpty || to.isEmpty || weight <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all fields.')));
       return;
     }
 
-    final String requestCode = 'REQ-${DateTime.now().millisecondsSinceEpoch}';
+    final String code = 'REQ-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
     final bool sent = await ApiService.createEvent(
       type: 'transport_request',
       role: 'farmer',
       userName: widget.userName,
       payload: {
-        'requestCode': requestCode,
+        'requestCode': code,
         'item': item,
         'from': from,
         'to': to,
         'routeKey': _routeKey(from, to),
-        'weightKg': _weight,
-        'distanceKm': _distance,
+        'weightKg': weight,
         'vehicleType': _vehicle,
-        'shareTruck': _shareTruck,
-        'notes': notes,
+        'allowSharing': _shareTruck,
         'proposedPrice': _price,
+        'notes': _notesController.text.trim(),
       },
     );
 
-    if (!mounted) {
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(sent ? 'Farmer request saved to MongoDB.' : 'Could not sync request.')),
-    );
-
-    if (sent) {
-      _itemController.clear();
-      _weightController.clear();
-      _notesController.clear();
-      await _refreshFeed();
-    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(sent ? 'Request Sent: $code' : 'Sync Error.')));
+    if (sent) _refreshData();
   }
 
-  Future<void> _joinSharedTruck(Map<String, dynamic> truckEvent) async {
-    final Map<String, dynamic> p = (truckEvent['payload'] as Map<String, dynamic>? ?? {});
-    final String truckId = (p['truckId'] ?? '').toString();
-    if (truckId.isEmpty || _weight <= 0 || _itemController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter item + weight before joining shared truck.')),
-      );
+  Future<void> _joinSharedTruck(Map<String, dynamic> spaceEvent) async {
+    final Map<String, dynamic> p = (spaceEvent['payload'] as Map<String, dynamic>? ?? {});
+    final double weight = double.tryParse(_weightController.text.trim()) ?? 0;
+
+    if (weight <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter weight first.')));
       return;
     }
-
-    final double pricePerKg = (p['pricePerKg'] is num)
-        ? (p['pricePerKg'] as num).toDouble()
-        : ((p['baseTripPrice'] is num) && (p['capacityKg'] is num) && (p['capacityKg'] as num) > 0)
-            ? (p['baseTripPrice'] as num).toDouble() / (p['capacityKg'] as num).toDouble()
-            : 0;
 
     final bool sent = await ApiService.createEvent(
       type: 'join_truck_request',
       role: 'farmer',
       userName: widget.userName,
       payload: {
-        'truckId': truckId,
-        'routeKey': p['routeKey'],
+        'truckSpaceEventId': spaceEvent['id'],
+        'truckId': p['truckId'],
+        'transporterName': spaceEvent['userName'],
         'from': p['from'],
         'to': p['to'],
         'item': _itemController.text.trim(),
-        'weightKg': _weight,
-        'expectedSplitPrice': _weight * pricePerKg,
+        'weightKg': weight,
+        'expectedSplitPrice': weight * (p['pricePerKg'] ?? 0),
       },
     );
 
-    if (!mounted) {
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(sent ? 'Join request sent to transporter.' : 'Failed to request shared truck.')),
-    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(sent ? 'Join request sent to transporter.' : 'Failed.')));
+    if (sent) _refreshData();
   }
 
-  Future<void> _respondToCounterOffer(Map<String, dynamic> counterEvent, String response) async {
-    final Map<String, dynamic> p = (counterEvent['payload'] as Map<String, dynamic>? ?? {});
-    final String requestCode = (p['requestCode'] ?? '').toString();
-    final String transporterName = (counterEvent['userName'] ?? '').toString();
-    final double? counterPrice = (p['counterPrice'] is num) ? (p['counterPrice'] as num).toDouble() : null;
-
-    final bool sent = await ApiService.createEvent(
-      type: 'farmer_counter_decision',
-      role: 'farmer',
-      userName: widget.userName,
-      payload: {
-        'requestCode': requestCode,
-        'farmerName': widget.userName,
-        'transporterName': transporterName,
-        'response': response,
-        'counterPrice': counterPrice,
-        'transporterDecisionEventId': counterEvent['id'],
-      },
-    );
-
-    if (!mounted) {
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(sent ? 'Counter offer $response.' : 'Could not send your response.')),
-    );
-
-    if (sent) {
-      await _refreshFeed();
-    }
-  }
-
-  Future<void> _respondToRetailerDemand(
-    Map<String, dynamic> demandEvent,
-    String decision, {
-    double? counterPrice,
-  }) async {
+  Future<void> _respondToRetailerDemand(Map<String, dynamic> demandEvent, String decision, {double? counterPrice}) async {
     final Map<String, dynamic> p = (demandEvent['payload'] as Map<String, dynamic>? ?? {});
     final bool sent = await ApiService.createEvent(
       type: 'retailer_demand_decision',
@@ -875,120 +791,85 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
       payload: {
         'retailerDemandEventId': demandEvent['id'],
         'retailerName': demandEvent['userName'],
-        'farmerName': widget.userName,
+        'goods': p['goods'],
         'decision': decision,
         'counterPrice': counterPrice,
-        'goods': p['goods'],
-        'quantityKg': p['quantityKg'],
-        'city': p['city'],
       },
     );
-
-    if (!mounted) {
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(sent ? 'Retailer request $decision.' : 'Could not send retailer decision.')),
-    );
-    if (sent) {
-      await _refreshFeed();
-    }
+    if (sent) _refreshData();
   }
 
   Future<void> _retailerCounterDialog(Map<String, dynamic> demandEvent) async {
-    final TextEditingController controller = TextEditingController();
-    final double? counter = await showDialog<double>(
+    final TextEditingController c = TextEditingController();
+    final double? res = await showDialog<double>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Counter Price to Retailer'),
-          content: TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Counter Price (Rs)', border: OutlineInputBorder()),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, double.tryParse(controller.text.trim())),
-              child: const Text('Send'),
-            ),
-          ],
-        );
+      builder: (ctx) => AlertDialog(
+        title: const Text('Counter Offer to Retailer'),
+        content: TextField(controller: c, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Your Price (Rs)')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, double.tryParse(c.text)), child: const Text('Send')),
+        ],
+      ),
+    );
+    if (res != null) _respondToRetailerDemand(demandEvent, 'counter', counterPrice: res);
+  }
+
+  Future<void> _respondToCounterOffer(Map<String, dynamic> transporterCounterEvent, String decision) async {
+    final Map<String, dynamic> p = (transporterCounterEvent['payload'] as Map<String, dynamic>? ?? {});
+    final bool sent = await ApiService.createEvent(
+      type: 'farmer_counter_response',
+      role: 'farmer',
+      userName: widget.userName,
+      payload: {
+        'requestCode': p['requestCode'],
+        'transporterName': transporterCounterEvent['userName'],
+        'decision': decision,
       },
     );
-
-    if (counter != null && counter > 0) {
-      await _respondToRetailerDemand(demandEvent, 'counter', counterPrice: counter);
-    }
+    if (sent) _refreshData();
   }
 
   @override
   Widget build(BuildContext context) {
-    final Map<String, String> decisionByCode = <String, String>{};
-    for (final Map<String, dynamic> d in _decisions) {
-      final Map<String, dynamic> p = (d['payload'] as Map<String, dynamic>? ?? {});
-      final String code = (p['requestCode'] ?? '').toString();
-      final String decision = (p['decision'] ?? '').toString();
-      if (code.isNotEmpty && decision.isNotEmpty) {
+    final Map<String, String> decisionByCode = {};
+    final List<Map<String, dynamic>> pendingCounterOffers = [];
+    final Map<String, String> farmerCounterResponseByCode = {};
+
+    for (final d in _decisions) {
+      final p = (d['payload'] as Map<String, dynamic>? ?? {});
+      final code = p['requestCode']?.toString() ?? '';
+      final decision = p['decision']?.toString() ?? '';
+      if (code.isNotEmpty && !decisionByCode.containsKey(code)) {
         decisionByCode[code] = decision;
+        if (decision == 'counter') pendingCounterOffers.add(d);
       }
     }
 
-    final Set<String> allocatedCodes = _allocations
-        .map((a) => ((a['payload'] as Map<String, dynamic>? ?? {})['requestCode'] ?? '').toString())
-        .where((code) => code.isNotEmpty)
-        .toSet();
+    final Set<String> allocatedCodes = _allocations.map((a) => (a['payload'] as Map)['requestCode']?.toString() ?? '').toSet();
 
-    final Map<String, String> farmerCounterResponseByCode = <String, String>{};
-    for (final Map<String, dynamic> e in _counterResponses) {
-      final Map<String, dynamic> p = (e['payload'] as Map<String, dynamic>? ?? {});
-      final String code = (p['requestCode'] ?? '').toString();
-      final String response = (p['response'] ?? '').toString();
-      if (code.isNotEmpty && response.isNotEmpty) {
-        farmerCounterResponseByCode[code] = response;
-      }
-    }
-
-    final List<Map<String, dynamic>> pendingCounterOffers = _decisions.where((event) {
-      final Map<String, dynamic> p = (event['payload'] as Map<String, dynamic>? ?? {});
-      final String decision = (p['decision'] ?? '').toString();
-      final String code = (p['requestCode'] ?? '').toString();
-      return decision == 'counter' && code.isNotEmpty && !farmerCounterResponseByCode.containsKey(code);
-    }).toList();
-
-    final Map<String, Map<String, dynamic>> retailerDecisionByDemandId = <String, Map<String, dynamic>>{};
-    for (final Map<String, dynamic> e in _retailerDemandResponses) {
-      final Map<String, dynamic> p = (e['payload'] as Map<String, dynamic>? ?? {});
-      final String demandId = (p['retailerDemandEventId'] ?? '').toString();
-      if (demandId.isNotEmpty) {
-        retailerDecisionByDemandId[demandId] = p;
-      }
+    final Map<String, Map<String, dynamic>> retailerDecisionByDemandId = {};
+    for (final fdd in _farmerDemandDecisions) {
+      final p = (fdd['payload'] as Map<String, dynamic>? ?? {});
+      final id = p['retailerDemandEventId']?.toString() ?? '';
+      if (id.isNotEmpty) retailerDecisionByDemandId[id] = p;
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.userName),
-        backgroundColor: Colors.green,
-        actions: [IconButton(onPressed: _refreshFeed, icon: const Icon(Icons.refresh))],
-      ),
+      appBar: AppBar(title: Text(widget.userName), backgroundColor: Colors.green, actions: [IconButton(onPressed: _refreshData, icon: const Icon(Icons.refresh))]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
             child: Padding(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(16),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Create Farmer Transport Request', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _itemController,
-                    decoration: const InputDecoration(labelText: 'Item (Banana, Grapes, etc.)', border: OutlineInputBorder()),
-                    onChanged: (_) => setState(() {}),
-                  ),
+                  const Text('New Transport Request', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 10),
+                  TextField(controller: _itemController, decoration: const InputDecoration(labelText: 'Produce Item (e.g. Tomato)', border: OutlineInputBorder())),
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -1041,7 +922,7 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    value: _vehicle,
+                    initialValue: _vehicle,
                     decoration: const InputDecoration(labelText: 'Vehicle', border: OutlineInputBorder()),
                     items: const [
                       DropdownMenuItem(value: 'mini', child: Text('Mini')),
@@ -1804,7 +1685,7 @@ class _RetailerDashboardState extends State<RetailerDashboard> {
         child: Column(
           children: [
             DropdownButtonFormField<String>(
-              value: _selectedGoods,
+              initialValue: _selectedGoods,
               decoration: const InputDecoration(labelText: 'Select Item', border: OutlineInputBorder()),
               items: _goodsOptions
                   .map((g) => DropdownMenuItem<String>(value: g, child: Text(g)))
@@ -1823,7 +1704,7 @@ class _RetailerDashboardState extends State<RetailerDashboard> {
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
-              value: _selectedCity,
+              initialValue: _selectedCity,
               decoration: const InputDecoration(labelText: 'Delivery City', border: OutlineInputBorder()),
               items: _cityOptions
                   .map((c) => DropdownMenuItem<String>(value: c, child: Text(c)))
@@ -1849,64 +1730,49 @@ class _RetailerDashboardState extends State<RetailerDashboard> {
             const SizedBox(height: 14),
             Align(
               alignment: Alignment.centerLeft,
-              child: Text('My Demands (${_myDemands.length}) - Live via WebSocket', style: const TextStyle(fontWeight: FontWeight.bold)),
+              child: Text('My Demand History (${_myDemands.length})', style: const TextStyle(fontWeight: FontWeight.bold)),
             ),
-            SizedBox(
-              height: 170,
+            Expanded(
               child: ListView.builder(
                 itemCount: _myDemands.length,
-                itemBuilder: (context, index) {
-                  final Map<String, dynamic> payload = (_myDemands[index]['payload'] as Map<String, dynamic>? ?? {});
-                  return ListTile(
-                    dense: true,
-                    title: Text('${payload['goods'] ?? '-'} | ${payload['quantityKg'] ?? '-'} kg'),
-                    subtitle: Text('${payload['city']?.toString() ?? '-'} | Offer Rs ${payload['offerPrice'] ?? '-'}'),
+                itemBuilder: (ctx, idx) {
+                  final Map<String, dynamic> d = _myDemands[idx];
+                  final Map<String, dynamic> p = (d['payload'] as Map<String, dynamic>? ?? {});
+                  final String demandId = (d['id'] ?? '').toString();
+
+                  final List<Map<String, dynamic>> responses = _farmerDemandDecisions.where((e) {
+                    final Map<String, dynamic> rp = (e['payload'] as Map<String, dynamic>? ?? {});
+                    return (rp['retailerDemandEventId'] ?? '').toString() == demandId;
+                  }).toList();
+
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${p['goods'] ?? 'Goods'} - ${p['quantityKg'] ?? '-'} kg', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          Text('City: ${p['city'] ?? '-'} | Offer: Rs ${p['offerPrice'] ?? '-'}'),
+                          const Divider(),
+                          Text('Farmer Responses (${responses.length}):', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          ...responses.map((r) {
+                            final Map<String, dynamic> rp = (r['payload'] as Map<String, dynamic>? ?? {});
+                            final String decision = (rp['decision'] ?? '-').toString().toUpperCase();
+                            final String counter = rp['counterPrice'] != null ? '| Counter Rs ${rp['counterPrice']}' : '';
+                            return Text('• ${r['userName'] ?? 'Farmer'}: $decision $counter', style: const TextStyle(fontSize: 12));
+                          }),
+                        ],
+                      ),
+                    ),
                   );
                 },
               ),
             ),
-            const Divider(),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text('Live Farmer Requests: ${_farmerRequests.length}', style: const TextStyle(fontWeight: FontWeight.bold)),
-            ),
-            ..._farmerRequests.take(3).map((req) {
-              final Map<String, dynamic> p = (req['payload'] as Map<String, dynamic>? ?? {});
-              return ListTile(
-                dense: true,
-                title: Text('${p['item'] ?? '-'} | ${p['weightKg'] ?? '-'} kg'),
-                subtitle: Text('${p['from'] ?? '-'} -> ${p['to'] ?? '-'}'),
-              );
-            }),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text('Transporter Decisions: ${_decisions.length}', style: const TextStyle(fontWeight: FontWeight.bold)),
-            ),
-            ..._decisions.take(3).map((d) {
-              final Map<String, dynamic> p = (d['payload'] as Map<String, dynamic>? ?? {});
-              return ListTile(
-                dense: true,
-                title: Text('${p['decision'] ?? '-'} | ${p['requestCode'] ?? '-'}'),
-                subtitle: Text('By ${d['userName'] ?? '-'}'),
-              );
-            }),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text('Farmer Responses To Retailer Requests: ${_farmerDemandDecisions.length}', style: const TextStyle(fontWeight: FontWeight.bold)),
-            ),
-            ..._farmerDemandDecisions.take(8).map((d) {
-              final Map<String, dynamic> p = (d['payload'] as Map<String, dynamic>? ?? {});
-              final String decision = (p['decision'] ?? '-').toString();
-              return ListTile(
-                dense: true,
-                title: Text('${p['goods'] ?? '-'} | ${p['city'] ?? '-'} | ${decision.toUpperCase()}'),
-                subtitle: Text('Farmer: ${p['farmerName'] ?? '-'} ${decision == 'counter' ? '| Counter Rs ${p['counterPrice'] ?? '-'}' : ''}'),
-              );
-            }),
           ],
         ),
       ),
     );
   }
 }
+
+String _routeKey(String f, String t) => '${f.toLowerCase().trim()}_${t.toLowerCase().trim()}';
