@@ -14,6 +14,7 @@ Future<void> main() async {
 enum AuthMode { login, signup }
 
 const String _configuredApiBaseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: '');
+const String _configuredApiKey = String.fromEnvironment('API_KEY', defaultValue: '');
 
 class BackendConfig {
   static final ValueNotifier<String> activeBaseUrl = ValueNotifier<String>(_initialBaseUrl());
@@ -49,6 +50,17 @@ class BackendConfig {
 }
 
 class ApiService {
+  static Map<String, String> _headers({bool json = false}) {
+    final Map<String, String> headers = <String, String>{};
+    if (json) {
+      headers['Content-Type'] = 'application/json';
+    }
+    if (_configuredApiKey.trim().isNotEmpty) {
+      headers['X-API-Key'] = _configuredApiKey.trim();
+    }
+    return headers;
+  }
+
   static Uri _uri(String path, {Map<String, String>? query}) {
     return Uri.parse('${BackendConfig.baseUrl}$path').replace(queryParameters: query);
   }
@@ -56,7 +68,7 @@ class ApiService {
   static Future<List<Map<String, String>>> fetchUsersByRole(String role) async {
     try {
       final Uri uri = _uri('/users', query: <String, String>{'role': role});
-      final http.Response response = await http.get(uri).timeout(const Duration(seconds: 10));
+      final http.Response response = await http.get(uri, headers: _headers()).timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) {
         return const [];
       }
@@ -84,7 +96,7 @@ class ApiService {
       final http.Response response = await http
           .post(
             uri,
-            headers: {'Content-Type': 'application/json'},
+            headers: _headers(json: true),
             body: jsonEncode(user),
           )
           .timeout(const Duration(seconds: 10));
@@ -104,7 +116,7 @@ class ApiService {
       final http.Response response = await http
           .post(
             uri,
-            headers: {'Content-Type': 'application/json'},
+            headers: _headers(json: true),
             body: jsonEncode({'phone': phone, 'role': role, 'password': password}),
           )
           .timeout(const Duration(seconds: 10));
@@ -143,7 +155,7 @@ class ApiService {
       final http.Response response = await http
           .post(
             uri,
-            headers: {'Content-Type': 'application/json'},
+            headers: _headers(json: true),
             body: jsonEncode({
               'type': type,
               'role': role,
@@ -161,7 +173,7 @@ class ApiService {
   static Future<List<Map<String, dynamic>>> fetchEvents({String? type}) async {
     try {
       final Uri uri = _uri('/events', query: type == null ? null : <String, String>{'type': type});
-      final http.Response response = await http.get(uri).timeout(const Duration(seconds: 10));
+      final http.Response response = await http.get(uri, headers: _headers()).timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) {
         return const [];
       }
@@ -197,6 +209,8 @@ class RealtimeService {
       BackendConfig.baseUrl,
       io.OptionBuilder()
           .setTransports(<String>['websocket'])
+          .setExtraHeaders(_configuredApiKey.trim().isEmpty ? <String, dynamic>{} : <String, dynamic>{'X-API-Key': _configuredApiKey.trim()})
+          .setAuth(_configuredApiKey.trim().isEmpty ? <String, dynamic>{} : <String, dynamic>{'apiKey': _configuredApiKey.trim()})
           .enableReconnection()
           .setReconnectionAttempts(999)
           .setReconnectionDelay(1000)
@@ -267,7 +281,7 @@ class AuthChoicePage extends StatelessWidget {
               ValueListenableBuilder<String>(
                 valueListenable: BackendConfig.activeBaseUrl,
                 builder: (context, url, _) => Text(
-                  'REST + WebSocket server: $url',
+                  'REST + WebSocket server: $url${_configuredApiKey.trim().isEmpty ? '' : ' | API key: enabled'}',
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontSize: 12, color: Colors.black54),
                 ),
@@ -1583,8 +1597,6 @@ class _RetailerDashboardState extends State<RetailerDashboard> {
   StreamSubscription<Map<String, dynamic>>? _wsSubscription;
 
   List<Map<String, dynamic>> _myDemands = [];
-  List<Map<String, dynamic>> _farmerRequests = [];
-  List<Map<String, dynamic>> _decisions = [];
   List<Map<String, dynamic>> _farmerDemandDecisions = [];
 
   @override
@@ -1609,8 +1621,6 @@ class _RetailerDashboardState extends State<RetailerDashboard> {
 
   Future<void> _refreshMyDemands() async {
     final List<Map<String, dynamic>> demandEvents = await ApiService.fetchEvents(type: 'retailer_demand');
-    final List<Map<String, dynamic>> requestEvents = await ApiService.fetchEvents(type: 'transport_request');
-    final List<Map<String, dynamic>> decisionEvents = await ApiService.fetchEvents(type: 'transporter_decision');
     final List<Map<String, dynamic>> farmerDemandDecisionEvents = await ApiService.fetchEvents(type: 'retailer_demand_decision');
     if (!mounted) {
       return;
@@ -1621,8 +1631,6 @@ class _RetailerDashboardState extends State<RetailerDashboard> {
 
     setState(() {
       _myDemands = myDemands;
-      _farmerRequests = requestEvents;
-      _decisions = decisionEvents;
       _farmerDemandDecisions = farmerDemandDecisionEvents.where((e) {
         final Map<String, dynamic> p = (e['payload'] as Map<String, dynamic>? ?? {});
         final String demandId = (p['retailerDemandEventId'] ?? '').toString();
