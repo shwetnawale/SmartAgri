@@ -17,34 +17,19 @@ const String _configuredApiBaseUrl = String.fromEnvironment('API_BASE_URL', defa
 const String _configuredApiKey = String.fromEnvironment('API_KEY', defaultValue: '');
 
 class BackendConfig {
-  static final ValueNotifier<String> activeBaseUrl = ValueNotifier<String>(_initialBaseUrl());
+  // Fixed backend URL - no IP configuration needed!
+  // For development on localhost: http://127.0.0.1:5000
+  // For Android emulator: http://10.0.2.2:5000
+  static const String backendURL = kIsWeb 
+    ? 'http://127.0.0.1:5000'  // Web browsers
+    : 'http://10.0.2.2:5000';  // Android emulator
 
-  static String _initialBaseUrl() {
+  static String get baseUrl {
+    // Use environment-configured URL if provided, otherwise use default
     if (_configuredApiBaseUrl.isNotEmpty) {
-      return _normalize(_configuredApiBaseUrl);
+      return _configuredApiBaseUrl;
     }
-    return kIsWeb ? 'http://127.0.0.1:5000' : 'http://10.0.2.2:5000';
-  }
-
-  static String get baseUrl => activeBaseUrl.value;
-
-  static String _normalize(String url) {
-    String normalized = url.trim();
-    if (normalized.isEmpty) {
-      return normalized;
-    }
-
-    // Allow plain IP/domain entry like 192.168.0.104 or mypc.local
-    if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
-      normalized = 'http://$normalized';
-    }
-
-    final Uri? parsed = Uri.tryParse(normalized);
-    if (parsed != null && parsed.host.isNotEmpty && parsed.hasPort == false) {
-      normalized = '${parsed.scheme}://${parsed.host}:5000';
-    }
-
-    return normalized.replaceAll(RegExp(r'/+$'), '');
+    return backendURL;
   }
 
 }
@@ -278,13 +263,10 @@ class AuthChoicePage extends StatelessWidget {
               const SizedBox(height: 12),
               const Text('Smart Agri Logistics', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              ValueListenableBuilder<String>(
-                valueListenable: BackendConfig.activeBaseUrl,
-                builder: (context, url, _) => Text(
-                  'REST + WebSocket server: $url${_configuredApiKey.trim().isEmpty ? '' : ' | API key: enabled'}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 12, color: Colors.black54),
-                ),
+              Text(
+                'Connected to REST + WebSocket server${_configuredApiKey.trim().isEmpty ? '' : ' | API key: enabled'}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12, color: Colors.black54),
               ),
               const SizedBox(height: 20),
               ElevatedButton(
