@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:socket_io_client/socket_io_client.dart' as io;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -173,63 +172,6 @@ class ApiService {
   }
 }
 
-class RealtimeService {
-  RealtimeService._();
-
-  static final RealtimeService instance = RealtimeService._();
-
-  io.Socket? _socket;
-  bool _connecting = false;
-  final StreamController<Map<String, dynamic>> _events = StreamController<Map<String, dynamic>>.broadcast();
-
-  Stream<Map<String, dynamic>> get events => _events.stream;
-
-  void ensureConnected() {
-    if (_socket?.connected == true || _connecting) {
-      return;
-    }
-
-    _connecting = true;
-    final io.Socket socket = io.io(
-      BackendConfig.baseUrl,
-      io.OptionBuilder()
-          .setTransports(<String>['websocket'])
-          .setExtraHeaders(_configuredApiKey.trim().isEmpty ? <String, dynamic>{} : <String, dynamic>{'X-API-Key': _configuredApiKey.trim()})
-          .setAuth(_configuredApiKey.trim().isEmpty ? <String, dynamic>{} : <String, dynamic>{'apiKey': _configuredApiKey.trim()})
-          .enableReconnection()
-          .setReconnectionAttempts(999)
-          .setReconnectionDelay(1000)
-          .disableAutoConnect()
-          .build(),
-    );
-
-    socket.onConnect((_) {
-      _connecting = false;
-    });
-
-    socket.onConnectError((_) {
-      _connecting = false;
-    });
-
-    socket.onError((_) {
-      _connecting = false;
-    });
-
-    socket.on('db_event', (dynamic data) {
-      if (data is Map) {
-        _events.add(Map<String, dynamic>.from(data));
-      }
-    });
-
-    socket.connect();
-    _socket = socket;
-  }
-
-  void dispose() {
-    _socket?.dispose();
-    _socket = null;
-  }
-}
 
 class SmartAgriPlatform extends StatelessWidget {
   const SmartAgriPlatform({super.key});
@@ -591,21 +533,8 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
               const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40),
-                child: TextField(
-                  onChanged: (val) {
-                    BackendConfig.activeBaseUrl.value = BackendConfig._normalize(val);
-                  },
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    labelText: 'Change Server IP (Optional)',
-                    labelStyle: TextStyle(color: Colors.white70),
-                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white70)),
-                  ),
-                ),
-              ),
             ],
+
           ),
         ),
       ),
@@ -634,7 +563,6 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
   bool _shareTruck = true;
   double _price = 0;
   bool _loading = false;
-  StreamSubscription<Map<String, dynamic>>? _wsSubscription;
 
   List<Map<String, dynamic>> _myRequestHistory = [];
   List<Map<String, dynamic>> _decisions = [];
@@ -647,18 +575,11 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
   void initState() {
     super.initState();
     _recalculateDistance();
-    RealtimeService.instance.ensureConnected();
-    _wsSubscription = RealtimeService.instance.events.listen((_) {
-      if (mounted) {
-        _refreshData();
-      }
-    });
     _refreshData();
   }
 
   @override
   void dispose() {
-    _wsSubscription?.cancel();
     _itemController.dispose();
     _fromController.dispose();
     _toController.dispose();
@@ -1118,7 +1039,6 @@ class TransporterDashboard extends StatefulWidget {
 }
 
 class _TransporterDashboardState extends State<TransporterDashboard> {
-  StreamSubscription<Map<String, dynamic>>? _wsSubscription;
   final TextEditingController _truckIdController = TextEditingController(text: 'MH-12-3909');
   final TextEditingController _fromController = TextEditingController(text: 'Nashik');
   final TextEditingController _toController = TextEditingController(text: 'Pune');
@@ -1133,7 +1053,6 @@ class _TransporterDashboardState extends State<TransporterDashboard> {
 
   @override
   void dispose() {
-    _wsSubscription?.cancel();
     _truckIdController.dispose();
     _fromController.dispose();
     _toController.dispose();
@@ -1146,12 +1065,6 @@ class _TransporterDashboardState extends State<TransporterDashboard> {
   @override
   void initState() {
     super.initState();
-    RealtimeService.instance.ensureConnected();
-    _wsSubscription = RealtimeService.instance.events.listen((_) {
-      if (mounted) {
-        _refreshRequests();
-      }
-    });
     _refreshRequests();
   }
 
@@ -1576,7 +1489,6 @@ class _RetailerDashboardState extends State<RetailerDashboard> {
   final List<String> _cityOptions = <String>['Pune', 'Nashik', 'Mumbai', 'Kolhapur', 'Nagpur'];
   String _selectedGoods = 'Banana';
   String _selectedCity = 'Pune';
-  StreamSubscription<Map<String, dynamic>>? _wsSubscription;
 
   List<Map<String, dynamic>> _myDemands = [];
   List<Map<String, dynamic>> _farmerDemandDecisions = [];
@@ -1584,12 +1496,6 @@ class _RetailerDashboardState extends State<RetailerDashboard> {
   @override
   void initState() {
     super.initState();
-    RealtimeService.instance.ensureConnected();
-    _wsSubscription = RealtimeService.instance.events.listen((_) {
-      if (mounted) {
-        _refreshMyDemands();
-      }
-    });
     _refreshMyDemands();
   }
 
@@ -1597,7 +1503,6 @@ class _RetailerDashboardState extends State<RetailerDashboard> {
   void dispose() {
     _qtyController.dispose();
     _offerPriceController.dispose();
-    _wsSubscription?.cancel();
     super.dispose();
   }
 
