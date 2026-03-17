@@ -16,6 +16,24 @@ python app.py
 flutter run
 ```
 
+## Backend Environments (Release/Dev Split)
+
+- **Release builds** always use `https://api.agriapp.com` (REST) and `wss://api.agriapp.com` (WebSocket).
+- **Dev runs** default to local backend endpoints:
+  - Web/Desktop: `http://127.0.0.1:5000`
+  - Android Emulator: `http://10.0.2.2:5000`
+- For physical devices on same WiFi, pass your laptop IP via dart-define.
+
+### Dev Run (Physical Device -> Laptop Backend)
+```powershell
+flutter run --dart-define=API_BASE_URL=http://192.168.1.100:5000
+```
+
+### Release Build (Locked to Production Domain)
+```powershell
+flutter build apk --release
+```
+
 ## Test Accounts
 
 | Role | Phone | Password |
@@ -49,6 +67,17 @@ flutter run
 - **API:** REST API (HTTP)
 - **Protocol:** JSON
 
+## Data Access Clarification
+
+Flutter cannot talk directly to databases like MongoDB or MySQL.
+You need a server-side backend (for example Node.js, Python/FastAPI, or Go) as the middle layer.
+
+Correct flow:
+
+`Flutter App -> Backend API (REST/WebSocket) -> Database`
+
+In this project, that backend middle layer is Python/Flask in `backend/app.py`.
+
 ## Project Structure
 
 ```
@@ -72,19 +101,14 @@ agri_logistic_platform/
 
 ## No IP Configuration
 
-The app automatically detects the backend server:
-- **Web/Desktop:** http://127.0.0.1:5000
-- **Android Emulator:** http://10.0.2.2:5000
+No manual IP entry UI is needed in the app.
 
-No manual IP entry needed!
+- In **release**, endpoint is fixed to production domain.
+- In **dev**, defaults are auto-selected by platform, with optional dart-define override when using a physical device.
 
 ## Working on Physical Device
 
-The app works on any Android device connected to:
-- Same WiFi network
-- Different WiFi network
-- Mobile data
-- Any location
+For local laptop backend in dev mode, phone and laptop should usually be on the same network unless you expose the backend publicly.
 
 ## Troubleshooting
 
@@ -113,6 +137,38 @@ flutter build apk --release
 ```
 
 Output: `build/app/outputs/apk/release/app-release.apk`
+
+## Make It Work From Anywhere
+
+To support any device, any network, and different IP locations, backend must be public.
+
+Recommended setup:
+
+1. Deploy backend to Render using `render.yaml` in repo root.
+2. Use MongoDB Atlas for cloud database.
+3. Point domain `api.agriapp.com` to deployed backend.
+4. Build and share release app.
+
+Release app endpoint targets:
+
+- REST: `https://api.agriapp.com`
+- WebSocket: `wss://api.agriapp.com`
+
+Optional dev run override (physical phone to laptop backend):
+
+```powershell
+flutter run --dart-define=API_BASE_URL=http://192.168.1.100:5000
+```
+
+## College/Laptop Network Change Guide
+
+When you move to college/home/another WiFi, your laptop IP usually changes.
+
+- Start backend on laptop.
+- Find new laptop IPv4 with `ipconfig`.
+- Run Flutter with updated URL using `API_BASE_URL`.
+
+See `STOP.md` for the full decision flow (same WiFi, hotspot, blocked college WiFi, and public access options).
 
 ## Notes
 

@@ -6,6 +6,7 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
 
 import 'package:agri_logistic_platform/main.dart';
 
@@ -18,17 +19,23 @@ void main() {
     expect(find.text('Sign Up'), findsOneWidget);
 
     await tester.tap(find.text('Login'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.text('Login - Select Role'), findsOneWidget);
+    expect(find.text('Welcome Back!'), findsOneWidget);
+    expect(find.text('Select your role to continue'), findsOneWidget);
     expect(find.text('Farmer'), findsOneWidget);
     expect(find.text('Transporter'), findsOneWidget);
     expect(find.text('Retailer'), findsOneWidget);
 
     await tester.tap(find.text('Farmer'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.text('Login as Farmer'), findsOneWidget);
-    expect(find.text('Need account? Sign Up'), findsOneWidget);
+    expect(find.text('FARMER'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    RealtimeService.instance.stop();
+    await tester.pump(const Duration(seconds: 13));
   });
 }
